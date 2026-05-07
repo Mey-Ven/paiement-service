@@ -35,6 +35,12 @@ public class PaiementController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @GetMapping("/creance/{idCreance}")
+    @Operation(summary = "Liste des paiements liés à une créance")
+    public ResponseEntity<List<PaiementDTO.Response>> getByCreance(@PathVariable String idCreance) {
+        return ResponseEntity.ok(service.getByCreance(idCreance));
+    }
+
     @PostMapping("/search")
     @Operation(summary = "Recherche multi-critères (11 champs)")
     public ResponseEntity<List<PaiementDTO.Response>> search(

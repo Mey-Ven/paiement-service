@@ -17,6 +17,7 @@ public class PaiementDTO {
         @NotBlank(message = "Le code créancier est obligatoire")
         private String codeCreancier;
 
+        @NotBlank(message = "L'identifiant de la créance est obligatoire")
         private String idCreance;
         private String referenceFacture;
         private String referenceArticle;

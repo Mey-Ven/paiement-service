@@ -23,6 +23,7 @@ import java.util.Random;
 public class PaiementService {
 
     private final PaiementRepository repository;
+    private final CreanceClientService creanceClient;
     private final Random random = new Random();
 
     // ─── Liste complète ────────────────────────────────────────────────────────
@@ -40,6 +41,15 @@ public class PaiementService {
         return toResponse(p);
     }
 
+    // ─── Paiements d'une créance ───────────────────────────────────────────────
+    public List<PaiementDTO.Response> getByCreance(String idCreance) {
+        // Vérifier que la créance existe
+        creanceClient.validerCreance(idCreance);
+        return repository.findAll(buildSpec(
+                new PaiementDTO.SearchRequest() {{ setIdCreance(idCreance); }}
+        )).stream().map(this::toResponse).toList();
+    }
+
     // ─── Recherche multi-critères (11 champs) ──────────────────────────────────
     public List<PaiementDTO.Response> search(PaiementDTO.SearchRequest req) {
         Specification<Paiement> spec = buildSpec(req);
@@ -52,7 +62,19 @@ public class PaiementService {
     // ─── Création ──────────────────────────────────────────────────────────────
     @Transactional
     public PaiementDTO.Response create(PaiementDTO.CreateRequest req) {
-        // Vérification référence transaction unique
+        // ── Validation inter-services ──────────────────────────────────────────
+        // 1. Vérifier que le créancier existe dans creance-service
+        creanceClient.validerCreancier(req.getCodeCreancier());
+
+        // 2. Vérifier que la créance existe (si fournie)
+        if (req.getIdCreance() != null && !req.getIdCreance().isBlank()) {
+            creanceClient.validerCreance(req.getIdCreance());
+        }
+
+        // 3. Vérifier que le canal est actif pour ce créancier
+        creanceClient.validerCanal(req.getCodeCreancier(), req.getCanalPaiement());
+
+        // ── Vérification référence transaction unique ──────────────────────────
         if (req.getReferenceTransaction() != null &&
                 repository.existsByReferenceTransaction(req.getReferenceTransaction())) {
             throw new RuntimeException("Référence transaction déjà utilisée : " + req.getReferenceTransaction());
@@ -88,6 +110,20 @@ public class PaiementService {
     public PaiementDTO.Response update(String id, PaiementDTO.UpdateRequest req) {
         Paiement entity = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Paiement introuvable : " + id));
+
+        // ── Validation inter-services (uniquement si les champs sont modifiés) ─
+        String newCode  = req.getCodeCreancier()  != null ? req.getCodeCreancier()  : entity.getCodeCreancier();
+        String newCanal = req.getCanalPaiement()  != null ? req.getCanalPaiement()  : entity.getCanalPaiement();
+
+        if (req.getCodeCreancier() != null) {
+            creanceClient.validerCreancier(req.getCodeCreancier());
+        }
+        if (req.getIdCreance() != null && !req.getIdCreance().isBlank()) {
+            creanceClient.validerCreance(req.getIdCreance());
+        }
+        if (req.getCodeCreancier() != null || req.getCanalPaiement() != null) {
+            creanceClient.validerCanal(newCode, newCanal);
+        }
 
         if (req.getCodeCreancier()       != null) entity.setCodeCreancier(req.getCodeCreancier());
         if (req.getIdCreance()           != null) entity.setIdCreance(req.getIdCreance());
